@@ -1,17 +1,14 @@
-# Claude Oracle 🔮
+# Claude Oracle
 
-A Gemini-powered AI orchestrator for Claude Code. Use Google's Gemini as a "lead architect" to guide Claude's development work.
+A CLI that makes Google's Gemini the "lead architect" for Claude Code. Think of it as giving your AI coding assistant its own AI assistant for strategic decisions.
 
-## Features
+## Why?
 
-- **`oracle ask`** - Strategic planning and code review
-- **`oracle ask --files`** - Attach code files for review
-- **`oracle ask --image`** - Analyze screenshots/diagrams
-- **`oracle imagine`** - Generate images (auto-provisions US server if geo-restricted)
-- **`oracle quick`** - Quick text answers
-- **`oracle history`** - Conversation memory (5 exchanges per project)
+Claude Code is great at writing code, but sometimes you want a second opinion on architecture, or need to validate an approach before diving in. This tool lets you query Gemini without leaving your terminal, and integrates directly into Claude Code workflows.
 
-## Installation
+The `/fullauto` command is where it gets interesting - Claude will autonomously consult Gemini at key decision points, like having a senior architect review your junior dev's work.
+
+## Quick Start
 
 ```bash
 git clone https://github.com/n1ira/claude-oracle.git
@@ -19,66 +16,84 @@ cd claude-oracle
 ./install.sh
 ```
 
-## Setup
-
-Get a [Gemini API key](https://makersuite.google.com/app/apikey) and add to your shell:
+Then set your Gemini API key ([get one here](https://makersuite.google.com/app/apikey)):
 
 ```bash
-echo 'export GEMINI_API_KEY="your-key-here"' >> ~/.bashrc
-source ~/.bashrc
+export GEMINI_API_KEY="your-key"
 ```
 
-**Optional** (for image generation in geo-restricted regions):
-```bash
-echo 'export VAST_API_KEY="your-vast-key"' >> ~/.bashrc
-```
-
-## Usage
+## Commands
 
 ```bash
-# Strategic planning
-oracle ask "How should I implement a caching layer?"
+# Ask for strategic advice
+oracle ask "Should I use Redis or Memcached for session caching?"
 
-# Code review
-oracle ask --files src/main.py "Review this code"
-oracle ask --files "src/main.py:1-100" "Review lines 1-100"
+# Get code reviewed
+oracle ask --files src/auth.py "Any security issues here?"
 
-# Image analysis
-oracle ask --image screenshot.png "What's wrong here?"
+# Review specific lines
+oracle ask --files "src/db.py:50-120" "Is this query efficient?"
 
-# Image generation
-oracle imagine "A logo for my startup"
+# Analyze a screenshot or diagram
+oracle ask --image error.png "What's causing this?"
 
-# Quick questions
-oracle quick "What's the best Python HTTP library?"
+# Generate images (auto-provisions US server if you're geo-restricted)
+oracle imagine "architecture diagram for microservices"
 
-# History
-oracle history          # View recent exchanges
-oracle history --clear  # Clear history
+# Quick one-off questions
+oracle quick "regex for email validation"
+
+# Conversation history (5 exchanges per project)
+oracle history
+oracle history --clear
 ```
 
 ## Claude Code Integration
 
-After installation, use the `/fullauto` command in Claude Code:
+After installing, you get the `/fullauto` slash command:
 
 ```
-/fullauto implement a user authentication system
+/fullauto implement rate limiting for the API
 ```
 
-This activates **FULLAUTO MODE** where Claude uses the Oracle as lead architect.
+This puts Claude in high-autonomy mode where it:
+1. Gathers context about your codebase
+2. Consults Gemini for an implementation plan
+3. Executes the plan, checking back with Gemini at decision points
+4. Gets final validation before marking complete
+
+It's like pair programming, but both programmers are AIs with different strengths.
+
+## Image Generation Workaround
+
+Gemini's image generation is geo-restricted in some regions. If you hit this, the Oracle will automatically:
+
+1. Find the cheapest US instance on Vast.ai (~$0.08/hr)
+2. Spin it up, generate your image there
+3. Download the result and destroy the instance
+
+Cost ends up being ~$0.01 per image. You'll need a [Vast.ai API key](https://vast.ai/) for this:
+
+```bash
+export VAST_API_KEY="your-vast-key"
+```
+
+## How it Works
+
+The Oracle maintains a 5-exchange conversation history per project directory. This gives Gemini enough context to make useful suggestions without blowing up the context window.
+
+For `/fullauto` mode, Claude writes to `FULLAUTO_CONTEXT.md` in your project root - this acts as persistent memory that survives conversation compactions.
+
+## Meta
+
+This repo was created using itself. The `/fullauto` command orchestrated Claude through:
+- Designing the directory structure
+- Writing the install script
+- Creating this README
+- Pushing to GitHub
+
+The Oracle bootstrapping its own existence.
 
 ## License
 
 MIT
-
----
-
-## Meta 🤯
-
-This repo was created using the Oracle itself! The `/fullauto` command guided Claude Code through:
-- Designing the repo structure
-- Creating the install script
-- Writing this README
-- Pushing to GitHub
-
-*The Oracle orchestrating its own birth.* 🔮✨
