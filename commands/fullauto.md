@@ -55,31 +55,15 @@ First, you MUST update the project context. Do the following:
    - CLAUDE.md
    - Any architecture docs
 
-4. **Create/Update FULLAUTO_CONTEXT.md** using this minimal template:
+4. **Create FULLAUTO_CONTEXT.md** by running:
 
-```markdown
-# FULLAUTO MODE ACTIVE
-
-> **POST-COMPACTION RECOVERY**: If you just woke up from compaction, do this FIRST:
-> 1. Read `~/.claude/commands/fullauto.md` to reload full instructions
-> 2. Then continue from "Next Steps" below
-
-## Current Task
-[USER'S ORIGINAL REQUEST - copy exactly]
-
-## Progress
-- [x] Completed: [what's done]
-- [ ] In progress: [current step]
-- [ ] Pending: [remaining steps]
-
-## Key Context
-[Important decisions, blockers, relevant files - keep brief]
-
-## Next Steps
-[Specific next action - be precise so post-compaction Claude knows exactly what to do]
+```bash
+oracle context init "PASTE THE USER'S EXACT REQUEST HERE"
 ```
 
-**Keep it short.** The full instructions live in `~/.claude/commands/fullauto.md`. This file just tracks state.
+This creates the context file with the critical post-compaction recovery header already included. Then edit the file to fill in Progress, Key Context, and Next Steps as you work.
+
+**Keep it short.** The full instructions live in this file (`~/.claude/commands/fullauto.md`). The context file just tracks state and tells your future self to reload this file.
 
 ---
 
