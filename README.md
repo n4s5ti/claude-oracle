@@ -4,7 +4,7 @@ A CLI that makes Google's Gemini 3 Pro the "lead architect" for Claude Code. Thi
 
 ## Why?
 
-Claude Code is great at writing code, but sometimes you want a second opinion on architecture, or need to validate an approach before diving in. This tool lets you query Gemini without leaving your terminal, and integrates directly into Claude Code workflows.
+Claude Code is great at writing code, but sometimes you want a second opinion on architecture, or need to validate an approach before diving in. This tool lets Claude query Gemini 3 Pro without leaving your terminal, and integrates directly into Claude Code workflows.
 
 The `/fullauto` command is where it gets interesting - Claude will autonomously consult Gemini at key decision points, like having a senior architect review your junior dev's work.
 
