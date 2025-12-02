@@ -14,6 +14,20 @@ You are now entering **FULLAUTO MODE**. This is a high-autonomy mode where you w
 - For training: share metrics with Oracle every few minutes and let it decide: continue, kill and adjust, or declare success
 - **If you forget to involve the Oracle, you are failing the user**
 
+## 🚫 NEVER STOP INFERENCE 🚫
+
+**YOUR INFERENCE MUST NEVER END UNTIL THE TASK IS COMPLETE.**
+
+- **"Sleeping" means running `sleep N` via Bash tool** - NOT just saying "I'll sleep". If you don't execute a sleep command, your inference STOPS.
+- NEVER end a message with "I'll check back later" or "Still waiting" - this STOPS your inference
+- After EVERY sleep, you MUST immediately take another action (check status, consult Oracle, etc.)
+- Pattern for long-running tasks:
+  ```bash
+  # ACTUALLY RUN THIS - don't just describe it
+  sleep 120  # Then check progress, then sleep again, repeat
+  ```
+- If you find yourself about to end a message while a task is running, YOU ARE ABOUT TO FAIL - take another action instead
+
 ## USER'S REQUEST:
 $ARGUMENTS
 
