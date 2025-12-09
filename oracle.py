@@ -155,6 +155,82 @@ def estimate_tokens(text: str) -> int:
     return len(text) // CHARS_PER_TOKEN
 
 
+def check_fullauto_context_health():
+    """
+    Check that FULLAUTO_CONTEXT.md is NOT gitignored and IS tracked.
+    This is critical for conversation continuity during compaction.
+    Auto-fixes .gitignore if the file is incorrectly ignored.
+    """
+    context_file = Path.cwd() / "FULLAUTO_CONTEXT.md"
+    gitignore_file = Path.cwd() / ".gitignore"
+
+    if not context_file.exists():
+        return  # No context file yet, nothing to check
+
+    # Check if in a git repo
+    git_dir = Path.cwd() / ".git"
+    if not git_dir.exists():
+        return  # Not a git repo
+
+    # Check if gitignored
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "FULLAUTO_CONTEXT.md"],
+            capture_output=True,
+            cwd=Path.cwd()
+        )
+        is_gitignored = result.returncode == 0
+    except Exception:
+        return  # Git not available
+
+    if is_gitignored:
+        print("\n⚠️  WARNING: FULLAUTO_CONTEXT.md is in .gitignore!")
+        print("   This file MUST be tracked for conversation continuity.")
+        print("   Attempting to fix .gitignore...\n")
+
+        # Try to remove it from .gitignore and add a warning comment
+        if gitignore_file.exists():
+            content = gitignore_file.read_text()
+            lines = content.split('\n')
+            new_lines = []
+            found_and_removed = False
+
+            for line in lines:
+                stripped = line.strip()
+                # Skip lines that ignore FULLAUTO_CONTEXT.md
+                if stripped == "FULLAUTO_CONTEXT.md" or stripped == "/FULLAUTO_CONTEXT.md":
+                    found_and_removed = True
+                    # Add warning comment instead
+                    new_lines.append("# FULLAUTO_CONTEXT.md - DO NOT IGNORE THIS FILE!")
+                    new_lines.append("# It is required for conversation continuity during compaction.")
+                    new_lines.append("# See: https://github.com/n1ira/claude-oracle")
+                else:
+                    new_lines.append(line)
+
+            if found_and_removed:
+                gitignore_file.write_text('\n'.join(new_lines))
+                print("   ✓ Fixed .gitignore - FULLAUTO_CONTEXT.md is no longer ignored")
+                print("   Run: git add FULLAUTO_CONTEXT.md .gitignore && git commit -m 'Track FULLAUTO_CONTEXT.md'\n")
+            else:
+                print("   Could not auto-fix. Please manually remove FULLAUTO_CONTEXT.md from .gitignore\n")
+
+    # Check if tracked in git
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "FULLAUTO_CONTEXT.md"],
+            capture_output=True,
+            text=True,
+            cwd=Path.cwd()
+        )
+        is_tracked = bool(result.stdout.strip())
+    except Exception:
+        return
+
+    if not is_tracked and not is_gitignored:
+        print("\n⚠️  WARNING: FULLAUTO_CONTEXT.md is not tracked in git!")
+        print("   Run: git add FULLAUTO_CONTEXT.md && git commit -m 'Track FULLAUTO_CONTEXT.md'\n")
+
+
 def ensure_fullauto_header():
     """Check if FULLAUTO_CONTEXT.md exists and ensure full /fullauto command is at the bottom."""
     context_file = Path.cwd() / "FULLAUTO_CONTEXT.md"
@@ -838,7 +914,7 @@ def ask_oracle(
     log_debug(f"Mode: {mode}, Thinking: {thinking_level}", debug)
     log_debug(f"Query length: {len(query)} chars", debug)
 
-    # Check API key (allow VERTEX_API_KEY, OAuth, or traditional API keys)
+    # Check for any valid authentication method
     api_key = get_gemini_api_key()
     vertex_key = os.environ.get("VERTEX_API_KEY")
     oauth_creds = get_oauth_credentials(debug)
@@ -1611,7 +1687,7 @@ def imagine(
     log_info("=== Oracle Imagine Started ===", debug)
     log_debug(f"Prompt: {prompt[:100]}...", debug)
 
-    # Check API key (allow VERTEX_API_KEY, OAuth, or traditional API keys)
+    # Check for any valid authentication method
     api_key = get_gemini_api_key()
     vertex_key = os.environ.get("VERTEX_API_KEY")
     oauth_creds = get_oauth_credentials(debug)
@@ -1737,7 +1813,7 @@ def quick_ask(query: str, debug: bool = False, no_history: bool = False) -> str:
     """Quick question without structured output - just get a text answer."""
     log_info("=== Quick Ask Started ===", debug)
 
-    # Check API key (allow VERTEX_API_KEY, OAuth, or traditional API keys)
+    # Check for any valid authentication method
     api_key = get_gemini_api_key()
     vertex_key = os.environ.get("VERTEX_API_KEY")
     oauth_creds = get_oauth_credentials(debug)
@@ -1933,6 +2009,9 @@ Generated images: ~/.oracle/images/
     logout_parser = subparsers.add_parser("logout", help="Logout and remove saved credentials")
 
     args = parser.parse_args()
+
+    # Check FULLAUTO_CONTEXT.md health (not gitignored, is tracked)
+    check_fullauto_context_health()
 
     # Auto-prepend recovery header to FULLAUTO_CONTEXT.md if it exists without one
     ensure_fullauto_header()
