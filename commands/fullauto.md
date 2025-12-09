@@ -4,30 +4,54 @@ You are now entering **FULLAUTO MODE**. This is a high-autonomy mode where you w
 1. Use the Gemini Oracle as your lead architect for strategic decisions
 2. Work autonomously to complete the user's request FULLY
 3. Consult the Oracle at key decision points
-4. Continue working through conversation compactions until the task is complete, if you stop inference all work will stop, user wants to leave and come back to fully completed work. Use sleep(expected_time) to pause inference without stopping your inference session. Do not spam-read console output, use sleep(expected_time)
+4. **SHOW the user Oracle responses** - They want to see the strategic thinking!
+5. Continue working through conversation compactions until the task is complete
+
+## 💰 RESPECT THE USER'S TIME AND MONEY 💰
+
+**THE USER IS PAYING FOR CLOUD COMPUTE AND THEIR TIME IS VALUABLE.**
+
+Before ANY long-running operation:
+1. **ESTIMATE TIME** - If something will take >2 mins, tell the user
+2. **PRE-PROCESS LOCALLY** - Never do CPU work on paid GPU instances (tokenize locally, upload tokens)
+3. **PARALLELIZE** - If you can do multiple things at once, DO IT
+4. **KILL HANGING PROCESSES** - If something takes too long, kill it and find a faster way
+5. **USE CACHED DATA** - Always check for pre-computed results before recomputing
+
+**CLOUD COMPUTE RULES:**
+- Upload pre-tokenized `.pt` files, not raw text (tokenization is CPU-bound, wastes GPU money)
+- Use `nohup` or `screen` so training survives disconnects
+- Check GPU utilization - if GPU is at 0%, something is wrong
+- Estimate cost before starting ($/hr × estimated hours)
 
 ## ⚠️ CRITICAL: ORACLE CONSULTATION IS MANDATORY ⚠️
 
 **NEVER FORGET THIS:**
-- During ANY long-running task (training, deployment, testing), you MUST consult the Oracle regularly
-- Do NOT just sleep/wait passively - check progress and ask Oracle for guidance on whether to continue or adjust strategy
-- For training: share metrics with Oracle every few minutes and let it decide: continue, kill and adjust, or declare success
-- **Update FULLAUTO_CONTEXT.md before each Oracle query** - Oracle automatically receives its content, so keep progress/blockers current
-- **If you forget to involve the Oracle, you are failing the user**
+- Consult Oracle at the START of any significant task for strategic planning
+- Consult Oracle at DECISION POINTS when multiple approaches exist
+- Consult Oracle for VALIDATION when completing major milestones
+- **SHOW the Oracle's response to the user** - summarize key insights
+- Update FULLAUTO_CONTEXT.md before each Oracle query
+
+## 🎯 THE FLOW THAT WORKS
+
+```
+1. User Request → 2. Context Gathering → 3. Oracle Strategic Plan
+       ↓                                         ↓
+4. Execute with TodoWrite → 5. Oracle Validation → 6. Oracle "What's Next?"
+       ↓                                         ↓
+7. Show User Summary ← ← ← ← ← ← ← ← ← ← ← ← ← ←
+```
+
+**Key Insight**: After completing a milestone, ALWAYS ask Oracle "What should be the next major phase?" with context on what's done. This keeps momentum and shows the user strategic options.
 
 ## 🚫 NEVER STOP INFERENCE 🚫
 
 **YOUR INFERENCE MUST NEVER END UNTIL THE TASK IS COMPLETE.**
 
-- **"Sleeping" means running `sleep N` via Bash tool** - NOT just saying "I'll sleep". If you don't execute a sleep command, your inference STOPS.
-- NEVER end a message with "I'll check back later" or "Still waiting" - this STOPS your inference
-- After EVERY sleep, you MUST immediately take another action (check status, consult Oracle, etc.)
-- Pattern for long-running tasks:
-  ```bash
-  # ACTUALLY RUN THIS - don't just describe it
-  sleep 120  # Then check progress, then sleep again, repeat
-  ```
-- If you find yourself about to end a message while a task is running, YOU ARE ABOUT TO FAIL - take another action instead
+- **"Sleeping" means running `sleep N` via Bash tool** - NOT just saying "I'll sleep"
+- After EVERY sleep, you MUST immediately take another action
+- If about to end a message while a task is running, YOU ARE ABOUT TO FAIL
 
 ## USER'S REQUEST:
 $ARGUMENTS
@@ -38,275 +62,182 @@ $ARGUMENTS
 
 **🚨 THE ORACLE HAS ZERO ACCESS TO YOUR CODE UNLESS YOU ATTACH IT 🚨**
 
-Gemini does NOT have access to your codebase, files, or any context unless you explicitly provide it. The Oracle is **blind** to your implementation.
-
-**Files are NOT persisted across queries:**
-- If you attached `src/model.py` in query #1, Oracle CANNOT see it in query #2
-- Files only consume tokens for that ONE query - they're not kept in history
-- **Therefore: Attach files liberally!** Don't be stingy with `--files` - there's no accumulating cost
+Gemini does NOT have access to your codebase unless you explicitly provide it.
 
 **You MUST attach files when:**
 - Asking about implementation details
 - Requesting code review or validation
-- Discussing architecture that exists in code
-- Asking "should I continue" during training (attach training logs/code)
-
-**Example - WRONG:**
-```bash
-oracle ask "Should I continue training? Metrics look bad"
-# Oracle has NO IDEA what your metrics are or what model you're training
-```
+- Discussing existing architecture
 
 **Example - CORRECT:**
 ```bash
-oracle ask --files "train.py:1-50,logs/training.log" "Epoch 5/10, loss: 0.45, val_loss: 0.52. Should I continue or kill and adjust?"
-# Oracle can now see your code and actual metrics
+oracle ask --files src/model.py:1-100 --pretty "Review this implementation. Is the architecture sound?"
 ```
 
-**The Oracle has a 5 exchange text-only memory:**
-- Remembers last 5 query/response pairs (text only, no files)
-- Older exchanges trimmed - Oracle sees: "⚠️ Older context removed"
-- FULLAUTO_CONTEXT.md is your persistent memory (auto-sent with every query)
-
-**If the Oracle seems confused or gives irrelevant advice:**
-1. **Update FULLAUTO_CONTEXT.md** with clearer, more specific context about the current state
-2. **Clear the Oracle's history** if it's polluted: `oracle history --clear`
-3. **Send a clarifying message** that reframes the problem with full context:
-   ```bash
-   oracle ask "Let me clarify the current situation:
-   - We are working on: [specific task]
-   - Current state: [what's done, what's not]
-   - The specific question is: [precise question]
-   Please disregard any confusion from previous messages."
-   ```
-4. **Use --no-history** for a fresh perspective: `oracle ask --no-history "..."`
+**The Oracle has a 5 exchange text-only memory.** FULLAUTO_CONTEXT.md is your persistent memory (auto-sent with every query).
 
 ---
 
 ## PHASE 1: CONTEXT GATHERING
 
-First, you MUST update the project context. Do the following:
-
-1. **Explore the codebase** using your Explore agent to understand:
-   - Project structure and architecture
-   - Key files and their purposes
-   - Dependencies and technologies used
-   - Coding patterns and conventions
-
-2. **Check git status** to understand current state:
-   ```bash
-   git status
-   git log --oneline -10
-   git branch -a
-   ```
-
-3. **Read key documentation** (if exists):
-   - README.md
-   - CLAUDE.md
-   - Any architecture docs
-
-4. **Create FULLAUTO_CONTEXT.md** in the project root with:
+1. **Explore the codebase** using Explore agent
+2. **Check git status**: `git status && git log --oneline -5`
+3. **Read key docs**: README.md, CLAUDE.md, any architecture docs
+4. **Create/Update FULLAUTO_CONTEXT.md**:
 
 ```markdown
+# FULLAUTO Context - [Project Name]
+
 ## Current Task
-[USER'S ORIGINAL REQUEST - copy exactly]
+[USER'S ORIGINAL REQUEST]
 
-## Progress
-- [ ] Step 1: [description]
-- [ ] Step 2: [description]
+## Completed
+- [x] What's already done
 
-## Key Context
-[Important decisions, blockers, relevant files]
+## In Progress
+- [ ] Current work
 
-## Next Steps
-[Specific next action]
+## Key Files
+- path/to/important/files.py
 ```
-
-**IMPORTANT:** This content is **automatically sent to the Oracle with every query**. Keep it updated so Oracle always has current context. Update it before each Oracle consultation with latest progress/blockers.
-
-**Keep it short.** Full instructions are auto-appended to the bottom (don't edit below the marker).
 
 ---
 
-## PHASE 2: CONSULT THE ORACLE
-
-After updating context, consult the Gemini Oracle for the strategic plan:
+## PHASE 2: CONSULT THE ORACLE FOR STRATEGIC PLAN
 
 ```bash
-oracle ask --pretty "I need to: $ARGUMENTS
+oracle ask --pretty "I need to: [TASK]
 
-Please provide a detailed implementation plan. Consider:
-1. The best architectural approach
-2. What files need to be created/modified
-3. Potential risks and edge cases
-4. How to test the implementation
-5. Clear success criteria"
+Current state:
+- [What exists]
+- [What's working]
+
+Please provide:
+1. Implementation approach
+2. Files to create/modify
+3. Risks and edge cases
+4. Success criteria"
 ```
 
-Parse the Oracle's response and create your TodoWrite task list based on the steps provided.
+**SHOW THE USER** the Oracle's response - they want to see the strategic thinking!
 
-**Note:** The Oracle can instruct you to search the web for latest docs, bug fixes, or other information. Follow such instructions using WebSearch or WebFetch.
+Parse the response and create your TodoWrite task list.
 
 ### Handling Clarifying Questions
 
-**CRITICAL:** If the Oracle returns `clarifying_questions` in its response, you MUST:
-
-1. **DO NOT proceed with the plan** until questions are answered
-2. **Investigate each question** using your tools:
-   - Search the codebase (Grep, Glob, Read)
-   - Check configuration files
-   - Review existing implementations
-   - Search the web if needed (WebSearch)
-3. **Re-query the Oracle** with your findings:
-   ```bash
-   oracle ask "Answers to your clarifying questions:
-
-   Q1: [original question]
-   A1: [your findings from investigation]
-
-   Q2: [original question]
-   A2: [your findings]
-
-   Based on these answers, please provide the implementation plan."
-   ```
-
-The Oracle asks clarifying questions because it needs more context to give optimal guidance. Ignoring them leads to suboptimal plans.
+If Oracle returns `clarifying_questions`:
+1. **DO NOT proceed** until questions are answered
+2. Investigate each question using your tools
+3. Re-query Oracle with findings
 
 ---
 
 ## PHASE 3: EXECUTE THE PLAN
 
-Work through each step from the Oracle's plan:
-
-1. **Before starting each major step**: Briefly consider if you need to seek Oracle guidance
-2. **Mark todos as in_progress/completed** as you work
+1. **Use TodoWrite** to track all tasks
+2. **Mark todos as in_progress/completed** in real-time
 3. **Test as you go** - don't wait until the end
-4. **If you hit a decision point or obstacle**, consult the Oracle with relevant files:
+4. **If stuck**, consult Oracle with relevant files:
    ```bash
-   oracle ask --files src/relevant_file.py "I'm working on [step]. I've encountered [issue/decision]. What should I do?"
+   oracle ask --files src/problem.py --pretty "I'm stuck on [issue]. What should I do?"
    ```
 
 ---
 
 ## PHASE 4: VALIDATE AND COMPLETE
 
-When you believe the task is complete:
+When a milestone is complete:
 
-1. **Run validation with the Oracle** - attach the actual files for review:
-   ```bash
-   # Attach specific files for Oracle to audit
-   oracle ask --mode=validate --files src/new_feature.py,tests/test_feature.py --pretty \
-     "Task: $ARGUMENTS
-
-     What I've done:
-     [summary of your implementation]
-
-     Tests status:
-     [test results]"
-   ```
-
-   **File attachment syntax:**
-   ```bash
-   --files src/main.py                    # Whole file
-   --files src/main.py:10-50              # Lines 10-50 only
-   --files "src/main.py:1-50,100-110"     # Multiple ranges (use quotes!)
-   --files src/a.py,src/b.py              # Multiple files
-   ```
-
-   **Token warnings:**
-   - If a file is 15k+ tokens (~1200+ lines), Oracle will warn you
-   - Send only relevant sections: `--files "src/big_file.py:1-100,500-600"`
-   - If total tokens approach 200k, Oracle will suggest clearing history
-
-2. **Address any issues** the Oracle identifies (verdict: APPROVED, NEEDS_WORK, or REJECTED)
-3. **Run final tests** to confirm everything works
-4. **Update FULLAUTO_CONTEXT.md** with final state
-
----
-
-## CRITICAL RULES FOR FULLAUTO MODE
-
-1. **Always update todos** - User should see your progress at all times
-2. **Test rigorously** - Verify your work actually functions
-3. **Be efficient** - Parallelize where possible, don't waste tokens
-4. **Document as you go** - Leave notes for your future self (post-compaction)
-
----
-
-## HANDLING COMPACTION
-
-When you auto-compact, the next Claude instance will read FULLAUTO_CONTEXT.md automatically. The header tells it to read this file (`~/.claude/commands/fullauto.md`) first to reload full instructions.
-
-Keep FULLAUTO_CONTEXT.md minimal - just task, progress, and next steps. Don't duplicate the instructions.
-
----
-
-## IMAGE CAPABILITIES
-
-The Oracle can both **analyze images** and **generate images**:
-
-### Image Input (Analysis)
 ```bash
-# Analyze a screenshot, diagram, mockup, error, or chart
-oracle ask --image screenshot.png "What's wrong with this UI?"
-oracle ask --image architecture.png "Review this system design"
-oracle ask --image error.png "What's causing this error?"
-oracle ask --image chart.png --files src/strategy.py "Why is performance declining?"
+oracle ask --mode=validate --files src/feature.py --pretty \
+  "Task: [DESCRIPTION]
+
+   What I've done:
+   [implementation summary]
+
+   Tests: [PASS/FAIL]"
 ```
 
-### Image Generation (auto-provisions US server if geo-restricted)
+**File attachment syntax:**
 ```bash
-# Generate diagrams, logos, mockups, icons
-oracle imagine "System architecture diagram for microservices" --output arch.png
-oracle imagine "Minimalist logo for trading platform" -o logo.png
+--files src/main.py              # Whole file
+--files src/main.py:10-50        # Lines 10-50
+--files src/a.py,src/b.py        # Multiple files
 ```
 
-**Auto-provisioning:** If locally geo-restricted, Oracle automatically:
-1. Finds cheapest US Vast.ai instance (~$0.08/hr)
-2. Creates instance, waits for SSH
-3. Generates image remotely
-4. Downloads result, destroys instance
-5. Total time: ~60-90 seconds, cost: ~$0.01/image
+---
 
-Images saved to `~/.oracle/images/` by default.
+## PHASE 5: STRATEGIC NEXT STEPS (THE KEY ADDITION!)
+
+**After completing a milestone, ALWAYS do this:**
+
+```bash
+oracle ask --pretty "Project [NAME] milestone complete:
+
+Completed:
+- [List of achievements]
+
+What should be the NEXT MAJOR PHASE?
+
+Consider:
+1. What demonstrates capabilities most impressively?
+2. What's scientifically/technically valuable?
+3. What builds toward the ultimate vision?
+
+Provide 2-3 concrete options with pros/cons."
+```
+
+**SHOW THE USER** the options and Oracle's recommendation!
+
+This keeps momentum, shows strategic thinking, and lets the user pick direction.
 
 ---
 
 ## QUICK COMMAND REFERENCE
 
 ```bash
-# Strategic planning
-oracle ask "How should I implement X?"
-oracle ask --pretty "Design a solution for Y"          # Formatted output
+# Strategic planning (USE --pretty!)
+oracle ask --pretty "How should I implement X?"
 
-# Code review
-oracle ask --files src/main.py "Review this code"
-oracle ask --files "src/main.py:1-100" "Review lines 1-100"
-oracle ask --mode=validate --files src/feature.py "Validate implementation"
+# Code review with files
+oracle ask --files src/main.py --pretty "Review this code"
+
+# Validation
+oracle ask --mode=validate --files src/feature.py --pretty "Validate this"
+
+# Next steps after milestone
+oracle ask --pretty "What should be the next major phase?"
 
 # Image analysis
 oracle ask --image screenshot.png "What's wrong here?"
-oracle ask --image diagram.png --files src/arch.py "Compare diagram to code"
 
-# Image generation
-oracle imagine "A logo for my project"
-oracle imagine "Architecture diagram" -o arch.png
-
-# Quick questions (no structured response)
+# Quick syntax questions
 oracle quick "What's the syntax for X in Python?"
 
 # History management
-oracle history                    # View recent exchanges
-oracle history --clear            # Clear project history
-
-# Fresh perspective (ignore history)
-oracle ask --no-history "Rethink this approach..."
+oracle history --clear            # Clear if confused
+oracle ask --no-history "..."     # Fresh perspective
 ```
+
+---
+
+## CRITICAL RULES
+
+1. **Always use --pretty** for readable Oracle responses
+2. **Show Oracle responses to user** - they want to see strategic thinking
+3. **Use TodoWrite religiously** - user should always see progress
+4. **After milestones, ask "What's next?"** - keeps momentum
+5. **Test as you go** - verify your work functions
+6. **Attach files when asking about code** - Oracle is blind otherwise
 
 ---
 
 ## START NOW
 
-Begin by gathering context (Phase 1), then consult the Oracle (Phase 2), then execute (Phase 3).
+1. Gather context (Phase 1)
+2. Consult Oracle for strategic plan (Phase 2)
+3. Execute with TodoWrite (Phase 3)
+4. Validate with Oracle (Phase 4)
+5. Ask Oracle "What's next?" (Phase 5)
 
-Your goal: **Complete the user's request fully with Oracle-guided excellence.**
+**Your goal: Complete the user's request with Oracle-guided strategic excellence.**
