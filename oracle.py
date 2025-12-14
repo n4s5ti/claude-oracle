@@ -289,6 +289,50 @@ If you are Claude operating in fullauto mode, you MUST read and follow the instr
     logger.info("Ensured /fullauto command is at bottom of FULLAUTO_CONTEXT.md")
 
 
+def ensure_claude_md_header():
+    """Append minimal recovery instructions to CLAUDE.md if it exists (non-intrusive)."""
+    # Search for CLAUDE.md in current directory and up
+    current = Path.cwd()
+    claude_file = None
+
+    for _ in range(10):
+        candidate = current / "CLAUDE.md"
+        if candidate.exists():
+            claude_file = candidate
+            break
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    if not claude_file:
+        return  # No CLAUDE.md, nothing to do
+
+    content = claude_file.read_text()
+
+    # Marker for our auto-generated section
+    marker = "<!-- ORACLE-RECOVERY -->"
+
+    # If marker exists, remove the old section
+    if marker in content:
+        marker_index = content.find(marker)
+        content = content[:marker_index].rstrip()
+
+    # Minimal, non-intrusive recovery note
+    recovery_note = f"""
+
+{marker}
+## Oracle Recovery
+
+If context was compacted mid-task, check `FULLAUTO_CONTEXT.md` for task state and run `/fullauto` to resume.
+"""
+
+    # Append to bottom
+    new_content = content + recovery_note
+    claude_file.write_text(new_content)
+    logger.info("Ensured Oracle recovery note is at bottom of CLAUDE.md")
+
+
 def get_gemini_api_key() -> Optional[str]:
     """Get Gemini API key from environment, checking multiple possible names."""
     return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
@@ -884,6 +928,31 @@ def get_context_file(debug: bool = False) -> Tuple[Optional[str], int]:
     return (None, 0)
 
 
+def get_claude_md_file(debug: bool = False) -> Tuple[Optional[str], int]:
+    """Find and read the CLAUDE.md file for project context."""
+    current = Path.cwd()
+    log_debug(f"Searching for CLAUDE.md starting from: {current}", debug)
+
+    for i in range(10):  # Max 10 levels up
+        claude_file = current / "CLAUDE.md"
+        log_debug(f"  Checking: {claude_file}", debug)
+
+        if claude_file.exists():
+            log_info(f"Found CLAUDE.md: {claude_file}", debug)
+            content = claude_file.read_text()
+            tokens = estimate_tokens(content)
+            log_debug(f"CLAUDE.md size: {len(content)} chars, ~{tokens} tokens", debug)
+            return (content, tokens)
+
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    log_debug("No CLAUDE.md found in directory tree", debug)
+    return (None, 0)
+
+
 def ask_oracle(
     query: str,
     mode: str = "plan",
@@ -960,21 +1029,33 @@ def ask_oracle(
         total_tokens += files_tokens
         all_warnings.extend(file_warnings)
 
-    # Get project context
+    # Get project context (FULLAUTO_CONTEXT.md and CLAUDE.md)
+    context_section = ""
+
     if context_override:
         context = context_override
         context_tokens = estimate_tokens(context)
-    else:
-        context, context_tokens = get_context_file(debug)
-
-    total_tokens += context_tokens
-
-    if context:
+        total_tokens += context_tokens
         context_section = f"\n\n## PROJECT CONTEXT:\n{context}"
-        log_debug(f"Using context: {len(context)} chars, ~{context_tokens} tokens", debug)
+        log_debug(f"Using context override: {len(context)} chars, ~{context_tokens} tokens", debug)
     else:
-        context_section = "\n\n(No FULLAUTO_CONTEXT.md found - operating without project context)"
-        log_debug("No context file - proceeding without project context", debug)
+        # Get CLAUDE.md first (project configuration)
+        claude_md, claude_md_tokens = get_claude_md_file(debug)
+        if claude_md:
+            total_tokens += claude_md_tokens
+            context_section += f"\n\n## CLAUDE.md (Project Configuration):\n{claude_md}"
+            log_debug(f"Using CLAUDE.md: {len(claude_md)} chars, ~{claude_md_tokens} tokens", debug)
+
+        # Get FULLAUTO_CONTEXT.md (task context)
+        context, context_tokens = get_context_file(debug)
+        if context:
+            total_tokens += context_tokens
+            context_section += f"\n\n## FULLAUTO_CONTEXT.md (Task Context):\n{context}"
+            log_debug(f"Using FULLAUTO_CONTEXT.md: {len(context)} chars, ~{context_tokens} tokens", debug)
+
+        if not claude_md and not context:
+            context_section = "\n\n(No CLAUDE.md or FULLAUTO_CONTEXT.md found - operating without project context)"
+            log_debug("No context files found - proceeding without project context", debug)
 
     # Check total token count
     log_info(f"Total estimated tokens: ~{total_tokens:,}", debug)
@@ -1902,7 +1983,7 @@ Generated images: ~/.oracle/images/
 
     # ask command
     ask_parser = subparsers.add_parser("ask", help="Ask the oracle for guidance")
-    ask_parser.add_argument("query", help="Your question or task description")
+    ask_parser.add_argument("query", nargs='*', help="Your question or task description (can be multiple words without quotes)")
     ask_parser.add_argument(
         "--mode",
         choices=["plan", "validate"],
@@ -1920,8 +2001,9 @@ Generated images: ~/.oracle/images/
         help="Override context (instead of reading from file)"
     )
     ask_parser.add_argument(
-        "--files",
-        help="Comma-separated list of files to attach (supports line ranges: file.py:1-50,100-110)"
+        "--files", "-f",
+        action='append',
+        help="Files to attach. Use multiple times: --files a.py --files b.py OR comma-separated: --files a.py,b.py"
     )
     ask_parser.add_argument(
         "--image",
@@ -1945,7 +2027,7 @@ Generated images: ~/.oracle/images/
 
     # imagine command
     imagine_parser = subparsers.add_parser("imagine", help="Generate an image")
-    imagine_parser.add_argument("prompt", help="Description of the image to generate")
+    imagine_parser.add_argument("prompt", nargs='*', help="Description of the image to generate (can be multiple words)")
     imagine_parser.add_argument(
         "--output", "-o",
         help="Output file path (default: auto-generated in ~/.oracle/images/)"
@@ -1962,7 +2044,7 @@ Generated images: ~/.oracle/images/
 
     # quick command
     quick_parser = subparsers.add_parser("quick", help="Quick question, text response")
-    quick_parser.add_argument("query", help="Your question")
+    quick_parser.add_argument("query", nargs='*', help="Your question (can be multiple words without quotes)")
     quick_parser.add_argument(
         "--debug",
         action="store_true",
@@ -2016,28 +2098,29 @@ Generated images: ~/.oracle/images/
     # Auto-prepend recovery header to FULLAUTO_CONTEXT.md if it exists without one
     ensure_fullauto_header()
 
+    # Auto-append minimal recovery note to CLAUDE.md if it exists
+    ensure_claude_md_header()
+
     if args.command == "ask":
-        # Parse files argument
+        # Join query words (allows "oracle ask how should I implement X" without quotes)
+        query = ' '.join(args.query) if args.query else ""
+        if not query:
+            print("ERROR: No query provided. Usage: oracle ask <your question>", file=sys.stderr)
+            sys.exit(1)
+
+        # Flatten files from action='append' and split comma-separated entries
         files = None
         if args.files:
-            # Split by comma, but be careful with line ranges that also use commas
-            # We split on commas that are followed by a path (not a number)
             files = []
-            current_spec = ""
-            for part in args.files.split(','):
-                part = part.strip()
-                # Check if this looks like a continuation of line ranges (just numbers with dash)
-                if current_spec and re.match(r'^\d+-?\d*$', part):
-                    current_spec += ',' + part
-                else:
-                    if current_spec:
-                        files.append(current_spec)
-                    current_spec = part
-            if current_spec:
-                files.append(current_spec)
+            for f in args.files:
+                # Split by comma (supports --files a.py,b.py)
+                for part in f.split(','):
+                    part = part.strip()
+                    if part:
+                        files.append(part)
 
         result = ask_oracle(
-            query=args.query,
+            query=query,
             mode=args.mode,
             context_override=args.context,
             thinking_level=args.thinking,
@@ -2052,8 +2135,12 @@ Generated images: ~/.oracle/images/
             print(json.dumps(result))
 
     elif args.command == "imagine":
+        prompt = ' '.join(args.prompt) if args.prompt else ""
+        if not prompt:
+            print("ERROR: No prompt provided. Usage: oracle imagine <description>", file=sys.stderr)
+            sys.exit(1)
         saved_path, error = imagine(
-            prompt=args.prompt,
+            prompt=prompt,
             output_path=args.output,
             reference_image=args.ref,
             debug=args.debug
@@ -2066,7 +2153,11 @@ Generated images: ~/.oracle/images/
             print(f"🔮 Image generated: {saved_path}")
 
     elif args.command == "quick":
-        print(quick_ask(args.query, debug=args.debug, no_history=args.no_history))
+        query = ' '.join(args.query) if args.query else ""
+        if not query:
+            print("ERROR: No query provided. Usage: oracle quick <your question>", file=sys.stderr)
+            sys.exit(1)
+        print(quick_ask(query, debug=args.debug, no_history=args.no_history))
 
     elif args.command == "history":
         project_id = get_project_id(args.debug)
